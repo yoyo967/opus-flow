@@ -79,6 +79,8 @@ class _Handler(BaseHTTPRequestHandler):
             return
         if pfad == "/api/flow/plan":
             self._send(200, planner.plane(str(payload.get("befehl", ""))))
+        elif pfad == "/api/flow/dry_run":
+            self._send(200, self.daemon.dry_run(payload.get("plan") or []))
         elif pfad == "/api/flow/run":
             args = payload.get("args") or {}
             self._send(200, self.daemon.run(str(payload.get("tool", "")), args))

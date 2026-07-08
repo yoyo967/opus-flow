@@ -179,6 +179,23 @@ class TestDaemon:
     def test_unbekanntes_tool(self, tmp_path: Path) -> None:
         assert "fehler" in self._daemon(tmp_path).run("gibt.nicht", {})
 
+    def test_dry_run_validiert_ohne_ausfuehrung(self, tmp_path: Path) -> None:
+        d = self._daemon(tmp_path)
+        plan = [
+            {"tool": "git.status", "args": {"repo": str(tmp_path)}},
+            {"tool": "shell.execute_powershell", "args": {"command": "echo hi"}},
+            {"tool": "shell.execute_powershell", "args": {"command": "git s; Remove-Item x"}},
+            {"tool": "fs.read_file", "args": {"pfad": str(tmp_path.parent / "aussen.txt")}},
+            {"tool": "gibt.nicht", "args": {}},
+        ]
+        schritte = d.dry_run(plan)["dry_run"]
+        assert schritte[0]["ok"] and schritte[0]["wirkungsklasse"] == "read"
+        assert schritte[1]["ok"] and schritte[1]["braucht_freigabe"] is True  # exec erlaubt
+        assert not schritte[2]["ok"] and "Denylist" in schritte[2]["hinweis"]  # Denylist
+        assert not schritte[3]["ok"] and "Scope" in schritte[3]["hinweis"]  # ausserhalb
+        assert not schritte[4]["ok"]  # unbekannt
+        assert d.audit.alle() == []  # Dry-Run fuehrt NICHTS aus
+
 
 class TestPlanner:
     def test_parse_plan(self) -> None:
