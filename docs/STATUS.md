@@ -30,9 +30,11 @@ wird deshalb zu **OPUS FLOW EX**. Konkret:
 
 ## Nächste Schritte (Reihenfolge)
 
-1. **OPUS FLOW EX — Provider-Katalog** (der große Schritt der Vision): OPUS-PRIME-EX-Gateway-Muster
-   nach opus-flow portieren; `config/models.yaml` mit Anthropic + Gemini/Vertex-EU + Gemma
-   lokal + **Gemma-Cloud-GPU**; Planner nutzt den Katalog; Modellwahl im Panel.
+1. **OPUS FLOW EX — Provider-Katalog ✅ (2026-07-08):** OPUS-PRIME-EX-Gateway-Muster portiert —
+   `config/models.yaml` + `src/flow/models.py` (8 Modelle: Gemma lokal/Cloud-GPU · Gemini/Vertex-EU
+   · Claude), `planner.plane(befehl, model_id)` mit Provider-Dispatch, `/api/flow/models`,
+   Modell-Dropdown im Panel. Gates grün (34 Tests); Gemini-Plan live verifiziert. Damit ist OPUS
+   FLOW modell-seitig so stark wie OPUS PRIME EX.
 2. **F3** — Replay + parametrisierte Workflow-Speicherung (JSON/YAML).
 3. **F2-Feinschliff** — automatische Ketten-Ausführung + Re-Plan + **Flow-Eval** (Gemma-Function-
    Calling-Zuverlässigkeit messen, §7/§9).
