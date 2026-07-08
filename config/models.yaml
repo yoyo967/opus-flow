@@ -1,0 +1,20 @@
+# Modell-Katalog fuer den OPUS-FLOW-Planner (Function-Calling / Schrittplaene).
+# OPUS FLOW EX: genauso stark wie OPUS PRIME EX -> voller hybrider Katalog, dasselbe Muster.
+# Provider:
+#   anthropic -> Anthropic API (ANTHROPIC_API_KEY via Env). Extra [anthropic].
+#   gemini    -> Google Gemini ueber Vertex AI, Region EXPLIZIT europe-west3 (EU-first). Extra
+#                [vertex] + GCP ADC. Pro in der Region nicht verfuegbar -> Flash.
+#   gemma     -> Gemma 4 ueber Ollama. Lokal (localhost:11434, keine Kosten/kein Abfluss) ODER
+#                remote (Cloud-GPU) via host_env -> Env-Var mit Endpoint-URL.
+# Optionale Felder: region (gemini), host_env (gemma-remote), model_name (provider-nativer Name),
+# temperature. Default = lokales Gemma (kein Datenabfluss, Non-Negotiable §1).
+default_model: "gemma4:e4b"
+catalog:
+  - {id: "gemma4:e4b",                 label: "Gemma 4 E4B (lokal, CPU)",          provider: gemma,     max_tokens: 4096}
+  - {id: "gemma4:26b",                 label: "Gemma 4 26B (lokal)",               provider: gemma,     max_tokens: 4096}
+  - {id: "gemma4:27b-cloud",           label: "Gemma 4 27B (Cloud-GPU)",           provider: gemma,     model_name: "gemma4:27b", host_env: "GEMMA_REMOTE_HOST", max_tokens: 4096}
+  - {id: "gemini-2.5-flash",           label: "Gemini 2.5 Flash (Vertex EU)",      provider: gemini,    region: "europe-west3", max_tokens: 4096}
+  - {id: "gemini-2.5-flash-lite",      label: "Gemini 2.5 Flash-Lite (Vertex EU)", provider: gemini,    region: "europe-west3", max_tokens: 4096}
+  - {id: "claude-sonnet-5",            label: "Claude Sonnet 5",                   provider: anthropic, max_tokens: 4096}
+  - {id: "claude-opus-4-8",            label: "Claude Opus 4.8",                   provider: anthropic, max_tokens: 4096}
+  - {id: "claude-haiku-4-5-20251001",  label: "Claude Haiku 4.5",                  provider: anthropic, temperature: 0.0, max_tokens: 2048}

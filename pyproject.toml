@@ -8,12 +8,15 @@ version = "0.1.0"
 description = "OPUS FLOW — lokaler Desktop-/Dev-Automations-Agent (F0: read-only Tools via MCP)"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = ["pyyaml>=6.0"]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "mypy>=1.10", "ruff>=0.4"]
+dev = ["pytest>=8.0", "mypy>=1.10", "ruff>=0.4", "types-PyYAML"]
 # MCP-Server (Broker-Schicht). Optional: Tool-Logik + Tests laufen ohne das SDK.
 mcp = ["mcp>=1.9"]
+# Planner-Provider (optional, lazy importiert; nur fuer Live-Aufrufe des jeweiligen Modells).
+anthropic = ["anthropic>=0.90"]
+vertex = ["google-cloud-aiplatform>=1.60"]
 
 [project.scripts]
 opus-flow-mcp = "src.flow.server:main"
@@ -44,6 +47,11 @@ namespace_packages = true
 [[tool.mypy.overrides]]
 # mcp = optionales Extra, lazy importiert in src/flow/server.py. Robust ob installiert oder nicht.
 module = ["mcp", "mcp.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# Planner-Provider-SDKs (optionale Extras [anthropic]/[vertex]), lazy in src/flow/planner.py.
+module = ["anthropic", "anthropic.*", "vertexai", "vertexai.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

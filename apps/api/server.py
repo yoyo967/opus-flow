@@ -23,7 +23,7 @@ from urllib.parse import urlparse
 _ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(_ROOT))
 
-from src.flow import planner, registry  # noqa: E402
+from src.flow import models, planner, registry  # noqa: E402
 from src.flow.audit import AuditLog  # noqa: E402
 from src.flow.daemon import FlowDaemon  # noqa: E402
 from src.flow.scope import Scope  # noqa: E402
@@ -62,6 +62,11 @@ class _Handler(BaseHTTPRequestHandler):
         if pfad == "/api/flow/tools":
             scope = [str(r) for r in self.daemon.scope.roots]
             self._send(200, {"tools": registry.liste(), "scope": scope})
+        elif pfad == "/api/flow/models":
+            self._send(200, {"modelle": [
+                {"id": m.id, "label": m.label, "provider": m.provider}
+                for m in models.list_models()
+            ], "default": models.default_model_id()})
         elif pfad == "/api/flow/audit":
             self._send(200, {"eintraege": self.daemon.audit.alle()})
         elif pfad == "/api/flow/pending":
@@ -78,7 +83,9 @@ class _Handler(BaseHTTPRequestHandler):
             self._send(400, {"fehler": "ungueltige Anfrage"})
             return
         if pfad == "/api/flow/plan":
-            self._send(200, planner.plane(str(payload.get("befehl", ""))))
+            mid = payload.get("model_id")
+            self._send(200, planner.plane(
+                str(payload.get("befehl", "")), str(mid) if mid else None))
         elif pfad == "/api/flow/dry_run":
             self._send(200, self.daemon.dry_run(payload.get("plan") or []))
         elif pfad == "/api/flow/run":

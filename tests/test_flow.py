@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import json
 import subprocess
 from pathlib import Path
 
@@ -14,6 +13,13 @@ import pytest
 from src.flow.audit import AuditLog
 from src.flow.daemon import FlowDaemon
 from src.flow.gate import braucht_freigabe
+from src.flow.models import (
+    ModelNotFound,
+    ModelProfile,
+    default_model_id,
+    list_models,
+    resolve_model,
+)
 from src.flow.planner import _parse_plan, plane
 from src.flow.redact import redact
 from src.flow.scope import Scope, ScopeError
@@ -206,23 +212,47 @@ class TestPlanner:
     def test_parse_plan_muell(self) -> None:
         assert _parse_plan("kein json hier") is None
 
-    def test_plane_mit_fake_opener(self) -> None:
-        class _Resp:
-            def __enter__(self) -> _Resp:
-                return self
+    def test_plane_mit_fake_caller(self) -> None:
+        def caller(profil: ModelProfile, system: str, user: str) -> str:
+            return '{"plan":[{"tool":"git.status","args":{"repo":"."}}]}'
 
-            def __exit__(self, *exc: object) -> None:
-                return None
-
-            def read(self) -> bytes:
-                inhalt = '{"plan":[{"tool":"git.status","args":{"repo":"."}}]}'
-                return json.dumps({"message": {"content": inhalt}}).encode("utf-8")
-
-        ergebnis = plane("zeig git status", opener=lambda req: _Resp())
+        ergebnis = plane("zeig git status", caller=caller)
         assert ergebnis["plan"][0]["tool"] == "git.status"
 
-    def test_plane_ollama_weg(self) -> None:
-        def boom(req: object) -> object:
+    def test_plane_reicht_modellwahl_durch(self) -> None:
+        erfasst: dict[str, str] = {}
+
+        def caller(profil: ModelProfile, system: str, user: str) -> str:
+            erfasst["id"] = profil.id
+            return '{"plan":[]}'
+
+        plane("x", model_id="claude-sonnet-5", caller=caller)
+        assert erfasst["id"] == "claude-sonnet-5"
+
+    def test_plane_unbekanntes_modell(self) -> None:
+        assert "fehler" in plane("x", model_id="gibt-nicht", caller=lambda *_: "{}")
+
+    def test_plane_modell_fehler(self) -> None:
+        def boom(profil: ModelProfile, system: str, user: str) -> str:
             raise ConnectionError()
 
-        assert "fehler" in plane("x", opener=boom)
+        assert "fehler" in plane("x", caller=boom)
+
+
+class TestModelCatalog:
+    def test_katalog_provider(self) -> None:
+        prov = {m.id: m.provider for m in list_models()}
+        assert prov["gemma4:e4b"] == "gemma"
+        assert prov["gemini-2.5-flash"] == "gemini"
+        assert prov["claude-sonnet-5"] == "anthropic"
+
+    def test_default_ist_lokales_gemma(self) -> None:
+        assert default_model_id() == "gemma4:e4b"  # Default = kein Datenabfluss
+
+    def test_cloud_gemma_felder(self) -> None:
+        p = resolve_model("gemma4:27b-cloud")
+        assert p.host_env == "GEMMA_REMOTE_HOST" and p.model_name == "gemma4:27b"
+
+    def test_unbekannt_faellt(self) -> None:
+        with pytest.raises(ModelNotFound):
+            resolve_model("gibt-nicht")

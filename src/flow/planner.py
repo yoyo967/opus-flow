@@ -1,35 +1,34 @@
-"""Planner — Befehl → Schrittplan via lokalem Gemma 4 (Ollama), §4 PLAN-Phase.
+"""Planner — Befehl → Schrittplan (§4 PLAN-Phase), hybrider Modell-Katalog (OPUS FLOW EX).
 
 Zwei-Phasen-Prinzip (§4): der Planner erzeugt NUR einen Plan (welche Tools, welche Args) — er
 führt **nichts** aus. Ausführung passiert später über die API, Schritt für Schritt, gegated.
 
-Lokal, kein Datenabfluss. Der HTTP-Opener ist injizierbar → Tests ohne Ollama/Netz. Fehlt Ollama
-oder ist die Antwort unparsbar, kommt ein **typisiertes** Ergebnis (kein Crash) — das Panel bleibt
-für direkte Tool-Aufrufe nutzbar.
+Modellwahl aus dem Katalog (`config/models.yaml`, `src/flow/models.py`): **gemma** (Ollama, lokal
+oder Cloud-GPU), **anthropic**, **gemini** (Vertex-EU) — dasselbe Muster wie OPUS PRIME EX. Der
+Modell-Caller ist injizierbar → Tests ohne Netz/SDK. Fehlt das Modell oder ist die Antwort
+unparsbar, kommt ein **typisiertes** Ergebnis (kein Crash).
 
-# SPEC: opus-deck/spec/FLOW_STUDIO.md §4 (Plan→Approve→Execute), §7 (Gemma lokal)
+# SPEC: opus-deck/spec/FLOW_STUDIO.md §4/§7; opus-flow/docs/STATUS.md (OPUS FLOW EX Vision)
 """
 
 from __future__ import annotations
 
 import json
+import os
 import re
 import urllib.request
 from collections.abc import Callable
 from typing import Any
 
+from src.flow.models import ModelNotFound, ModelProfile, default_model_id, resolve_model
 from src.flow.registry import liste
 
-_HOST = "http://localhost:11434"
+_OLLAMA_HOST = "http://localhost:11434"
 _TIMEOUT_S = 300
-_MODELL = "gemma4:e4b"
 _JSON_BLOCK = re.compile(r"\{.*\}", re.DOTALL)
 
-Opener = Callable[[urllib.request.Request], Any]
-
-
-def _default_opener(req: urllib.request.Request) -> Any:
-    return urllib.request.urlopen(req, timeout=_TIMEOUT_S)  # noqa: S310  # nur localhost-Ollama
+# Caller: (profil, system, user) -> Rohtext des Modells. Injizierbar (Tests).
+ModelCaller = Callable[[ModelProfile, str, str], str]
 
 
 def _system_prompt() -> str:
@@ -48,37 +47,85 @@ def _system_prompt() -> str:
 
 def plane(
     befehl: str,
-    opener: Opener = _default_opener,
-    modell: str = _MODELL,
-    host: str = _HOST,
+    model_id: str | None = None,
+    caller: ModelCaller | None = None,
 ) -> dict[str, Any]:
-    """Erzeuge einen Schrittplan. Rückgabe: {plan:[...], modell} oder {fehler:...}."""
+    """Erzeuge einen Schrittplan mit dem gewaehlten Modell. {plan, modell} oder {fehler}."""
     if not befehl.strip():
         return {"fehler": "Leerer Befehl."}
+    try:
+        profil = resolve_model(model_id or default_model_id())
+    except ModelNotFound as exc:
+        return {"fehler": str(exc)}
+    ruf = caller or _default_caller
+    try:
+        inhalt = ruf(profil, _system_prompt(), befehl.strip())
+    except Exception as exc:  # Modell/Provider nicht erreichbar (Netz/SDK/Key/ADC)
+        return {"fehler": f"Planner-Modell '{profil.id}' nicht erreichbar: {type(exc).__name__}"}
+    plan = _parse_plan(inhalt)
+    if plan is None:
+        return {"fehler": "Plan nicht parsebar.", "roh": inhalt[:2000], "modell": profil.label}
+    return {"plan": plan, "modell": profil.label, "provider": profil.provider}
+
+
+def _default_caller(profil: ModelProfile, system: str, user: str) -> str:
+    """Ruft je Provider das passende Modell. SDKs werden lazy importiert (Extras optional)."""
+    if profil.provider == "gemma":
+        return _call_gemma(profil, system, user)
+    if profil.provider == "anthropic":
+        return _call_anthropic(profil, system, user)
+    if profil.provider == "gemini":
+        return _call_gemini(profil, system, user)
+    raise ValueError(f"Unbekannter Provider: {profil.provider}")
+
+
+def _call_gemma(profil: ModelProfile, system: str, user: str) -> str:
+    """Gemma ueber Ollama (lokal oder Cloud-GPU via host_env). Stdlib, kein Extra noetig."""
+    host = os.environ.get(profil.host_env) if profil.host_env else _OLLAMA_HOST
+    if not host:
+        raise RuntimeError(f"Cloud-GPU-Host nicht gesetzt: ${profil.host_env}")
     payload = json.dumps({
-        "model": modell,
-        "messages": [
-            {"role": "system", "content": _system_prompt()},
-            {"role": "user", "content": befehl.strip()},
-        ],
-        "stream": False,
-        "format": "json",
-        "options": {"temperature": 0},
+        "model": profil.model_name or profil.id,
+        "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
+        "stream": False, "format": "json", "options": {"temperature": 0},
     }).encode("utf-8")
     req = urllib.request.Request(
         f"{host.rstrip('/')}/api/chat", data=payload,
         headers={"Content-Type": "application/json"}, method="POST",
     )
-    try:
-        with opener(req) as resp:
-            daten = json.loads(resp.read().decode("utf-8"))
-    except Exception as exc:  # Ollama nicht erreichbar / Modell nicht gezogen
-        return {"fehler": f"Planner-Modell nicht erreichbar ({host}): {type(exc).__name__}"}
-    inhalt = str((daten.get("message") or {}).get("content", "")).strip()
-    plan = _parse_plan(inhalt)
-    if plan is None:
-        return {"fehler": "Plan nicht parsebar.", "roh": inhalt[:2000]}
-    return {"plan": plan, "modell": modell}
+    with urllib.request.urlopen(req, timeout=_TIMEOUT_S) as resp:  # noqa: S310  # Ollama-Endpoint
+        daten = json.loads(resp.read().decode("utf-8"))
+    return str((daten.get("message") or {}).get("content", "")).strip()
+
+
+def _call_anthropic(profil: ModelProfile, system: str, user: str) -> str:
+    """Claude ueber die Anthropic-API (Extra [anthropic], ANTHROPIC_API_KEY)."""
+    import anthropic
+
+    kwargs: dict[str, Any] = {
+        "model": profil.id, "max_tokens": profil.max_tokens,
+        "system": system, "messages": [{"role": "user", "content": user}],
+    }
+    if profil.temperature is not None:
+        kwargs["temperature"] = profil.temperature
+    antwort = anthropic.Anthropic().messages.create(**kwargs)
+    return "".join(
+        b.text for b in antwort.content if getattr(b, "type", None) == "text"
+    )
+
+
+def _call_gemini(profil: ModelProfile, system: str, user: str) -> str:
+    """Gemini ueber Vertex AI (EU-Region; Extra [vertex] + GCP ADC)."""
+    import vertexai
+    from vertexai.generative_models import GenerativeModel
+
+    projekt = os.environ.get("GOOGLE_CLOUD_PROJECT") or "leadmachines-prod"
+    vertexai.init(project=projekt, location=profil.region or "europe-west3")
+    modell = GenerativeModel(profil.model_name or profil.id, system_instruction=system)
+    antwort = modell.generate_content(
+        user, generation_config={"max_output_tokens": profil.max_tokens, "temperature": 0},
+    )
+    return str(getattr(antwort, "text", ""))
 
 
 def _parse_plan(inhalt: str) -> list[dict[str, Any]] | None:
