@@ -27,6 +27,7 @@ from src.flow import models, planner, registry  # noqa: E402
 from src.flow.audit import AuditLog  # noqa: E402
 from src.flow.daemon import FlowDaemon  # noqa: E402
 from src.flow.scope import Scope  # noqa: E402
+from src.flow.workflows import WorkflowStore  # noqa: E402
 
 _HOST = "127.0.0.1"
 _PORT = int(os.environ.get("FLOW_PORT", "8850"))
@@ -38,6 +39,10 @@ def _scope() -> Scope:
 
 def _audit_pfad() -> Path:
     return Path(os.environ.get("FLOW_AUDIT") or (Path.cwd() / ".flow" / "audit.jsonl"))
+
+
+def _wf_dir() -> Path:
+    return Path(os.environ.get("FLOW_WORKFLOWS") or (Path.cwd() / ".flow" / "workflows"))
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -71,6 +76,9 @@ class _Handler(BaseHTTPRequestHandler):
             self._send(200, {"eintraege": self.daemon.audit.alle()})
         elif pfad == "/api/flow/pending":
             self._send(200, {"pending": list(self.daemon.pending.values())})
+        elif pfad == "/api/flow/workflows":
+            wf = self.daemon.wf_store
+            self._send(200, {"workflows": wf.liste() if wf else []})
         else:
             self._send(404, {"fehler": "not found"})
 
@@ -95,15 +103,31 @@ class _Handler(BaseHTTPRequestHandler):
             self._send(200, self.daemon.approve(str(payload.get("id", ""))))
         elif pfad == "/api/flow/reject":
             self._send(200, self.daemon.reject(str(payload.get("id", ""))))
+        elif pfad == "/api/flow/workflow/save":
+            self._send(200, self._wf_save(payload))
+        elif pfad == "/api/flow/workflow/run":
+            self._send(200, self.daemon.run_workflow(
+                str(payload.get("id", "")), payload.get("params") or {}))
         else:
             self._send(404, {"fehler": "not found"})
+
+    def _wf_save(self, payload: dict[str, Any]) -> dict[str, Any]:
+        wf = self.daemon.wf_store
+        if wf is None:
+            return {"fehler": "Kein Workflow-Store."}
+        try:
+            return wf.speichere(
+                str(payload.get("name", "")), payload.get("plan") or [], payload.get("params"))
+        except ValueError as exc:
+            return {"fehler": str(exc)}
 
     def log_message(self, format: str, *args: Any) -> None:  # noqa: A002
         pass
 
 
 def main() -> int:
-    _Handler.daemon = FlowDaemon(scope=_scope(), audit=AuditLog(_audit_pfad()))
+    _Handler.daemon = FlowDaemon(
+        scope=_scope(), audit=AuditLog(_audit_pfad()), wf_store=WorkflowStore(_wf_dir()))
     print(f"[flow] OPUS FLOW API · Scope: {[str(r) for r in _Handler.daemon.scope.roots]}")
     print(f"[flow] -> http://{_HOST}:{_PORT}   (Strg+C zum Beenden)")
     with socketserver.ThreadingTCPServer((_HOST, _PORT), _Handler) as httpd:

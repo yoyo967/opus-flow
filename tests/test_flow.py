@@ -25,6 +25,7 @@ from src.flow.redact import redact
 from src.flow.scope import Scope, ScopeError
 from src.flow.shell import pruefe_kommando, shell_execute
 from src.flow.tools import fs_list_files, fs_read_file, git_diff, git_status
+from src.flow.workflows import WorkflowStore, substituiere
 
 
 class TestScope:
@@ -256,3 +257,51 @@ class TestModelCatalog:
     def test_unbekannt_faellt(self) -> None:
         with pytest.raises(ModelNotFound):
             resolve_model("gibt-nicht")
+
+
+class TestWorkflows:
+    def _store(self, tmp_path: Path) -> WorkflowStore:
+        return WorkflowStore(tmp_path / "wf")
+
+    def test_speichern_listen_lesen(self, tmp_path: Path) -> None:
+        store = self._store(tmp_path)
+        wf = store.speichere(
+            "Status & Liste",
+            [
+                {"tool": "git.status", "args": {"repo": "${repo}"}},
+                {"tool": "fs.list_files", "args": {"pfad": "."}},
+            ],
+            params=["repo"],
+        )
+        assert wf["id"] == "status-liste" and wf["params"] == ["repo"]
+        assert len(store.liste()) == 1 and store.liste()[0]["schritte_n"] == 2
+        gelesen = store.lies("status-liste")
+        assert gelesen and gelesen["schritte"][0]["tool"] == "git.status"
+
+    def test_leerer_workflow_fehler(self, tmp_path: Path) -> None:
+        with pytest.raises(ValueError, match="mindestens einen Schritt"):
+            self._store(tmp_path).speichere("leer", [])
+
+    def test_substituiere_ersetzt_params(self) -> None:
+        schritte = [{"tool": "fs.read_file", "args": {"pfad": "${repo}/README.md"}}]
+        out = substituiere(schritte, {"repo": "D:/dev/opus-flow"})
+        assert out[0]["args"]["pfad"] == "D:/dev/opus-flow/README.md"
+
+    def test_daemon_run_workflow_gegatet(self, tmp_path: Path) -> None:
+        store = self._store(tmp_path)
+        store.speichere(
+            "Echo-Flow",
+            [{"tool": "shell.execute_powershell", "args": {"command": "echo ${text}"}}],
+        )
+        d = FlowDaemon(
+            scope=Scope.of(tmp_path), audit=AuditLog(tmp_path / "a.jsonl"), wf_store=store)
+        antwort = d.run_workflow("echo-flow", {"text": "hallo"})
+        # exec-Schritt -> PENDING (Gate greift auch im Workflow), Param ersetzt:
+        assert antwort["ergebnisse"][0]["pending"]["args"]["command"] == "echo hallo"
+        assert d.audit.alle() == []  # noch nichts ausgefuehrt
+
+    def test_daemon_run_unbekannter_workflow(self, tmp_path: Path) -> None:
+        d = FlowDaemon(
+            scope=Scope.of(tmp_path), audit=AuditLog(tmp_path / "a.jsonl"),
+            wf_store=self._store(tmp_path))
+        assert "fehler" in d.run_workflow("gibt-nicht", {})

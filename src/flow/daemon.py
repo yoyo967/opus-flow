@@ -14,9 +14,10 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
-from src.flow import gate, registry, shell
+from src.flow import gate, registry, shell, workflows
 from src.flow.audit import AuditLog
 from src.flow.scope import Scope, ScopeError
+from src.flow.workflows import WorkflowStore
 
 
 @dataclass
@@ -24,6 +25,18 @@ class FlowDaemon:
     scope: Scope
     audit: AuditLog
     pending: dict[str, dict[str, Any]] = field(default_factory=dict)
+    wf_store: WorkflowStore | None = None
+
+    def run_workflow(self, wf_id: str, params: dict[str, str]) -> dict[str, Any]:
+        """Gespeicherten Workflow ausfuehren: Params ersetzen, jeden Schritt GEGATET (§6, F3)."""
+        if self.wf_store is None:
+            return {"fehler": "Kein Workflow-Store konfiguriert."}
+        wf = self.wf_store.lies(wf_id)
+        if wf is None:
+            return {"fehler": f"Unbekannter Workflow: {wf_id}"}
+        schritte = workflows.substituiere(wf["schritte"], params or {})
+        ergebnisse = [self.run(str(s["tool"]), s["args"]) for s in schritte]
+        return {"workflow": wf["name"], "ergebnisse": ergebnisse}
 
     def run(self, tool: str, args: dict[str, Any]) -> dict[str, Any]:
         """read → sofort ausführen (auto); exec/write/ui → PENDING (braucht Freigabe)."""
