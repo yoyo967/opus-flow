@@ -34,8 +34,14 @@ wird deshalb zu **OPUS FLOW EX**. Konkret:
    `config/models.yaml` + `src/flow/models.py` (8 Modelle: Gemma lokal/Cloud-GPU · Gemini/Vertex-EU
    · Claude), `planner.plane(befehl, model_id)` mit Provider-Dispatch, `/api/flow/models`,
    Modell-Dropdown im Panel. Gates grün (34 Tests); Gemini-Plan live verifiziert. Damit ist OPUS
-   FLOW modell-seitig so stark wie OPUS PRIME EX.
-2. **F3** — Replay + parametrisierte Workflow-Speicherung (JSON/YAML).
+   FLOW modell-seitig so stark wie OPUS PRIME EX. *(erledigt)*
+2. **F3 — Replay + parametrisierte Workflow-Speicherung ✅ (2026-07-08):** `src/flow/workflows.py`
+   (`WorkflowStore` speichert bestätigte Flüsse als JSON `{name,params,schritte}`; `substituiere()`
+   ersetzt `${param}` in Args), `daemon.run_workflow()` spielt GEGATET ab (Scope + Gate je
+   Wirkungsklasse bleiben bindend). HTTP: GET `/api/flow/workflows`, POST `workflow/save`|`run`.
+   Flow-Panel: neuer **Workflows-Tab** (Plan speichern · listen · mit `${param}`-Werten abspielen).
+   Gates grün (ruff/mypy 16/pytest 39); Save→List→Run live verifiziert (`${repo}`→git.status auto).
+   opus-flow `aff253d`, opus-deck `309e035`.
 3. **F2-Feinschliff** — automatische Ketten-Ausführung + Re-Plan + **Flow-Eval** (Gemma-Function-
    Calling-Zuverlässigkeit messen, §7/§9).
 4. **F4** — GUI-Automation (Windows UI Automation / DOM).
