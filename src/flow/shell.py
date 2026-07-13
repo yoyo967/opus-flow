@@ -49,6 +49,11 @@ def _powershell_runner(command: str, cwd: str, timeout: int) -> tuple[int, str, 
     return ergebnis.returncode, ergebnis.stdout or "", ergebnis.stderr or ""
 
 
+def sicherheits_listen() -> dict[str, list[str]]:
+    """Allowlist/Denylist offenlegen (Transparenz für den Security-Review, F5)."""
+    return {"allowlist": sorted(_ALLOWLIST), "denylist": [d.strip() for d in _DENYLIST]}
+
+
 def pruefe_kommando(command: str) -> str | None:
     """Gibt einen Ablehnungsgrund zurück, oder None wenn zulässig (Allowlist ∧ ¬Denylist)."""
     cmd = command.strip()

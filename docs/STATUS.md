@@ -69,8 +69,17 @@ wird deshalb zu **OPUS FLOW EX**. Konkret:
    - **LIVE VERIFIZIERT (2026-07-09):** echter UIA-Treiber gegen Windows-11-Notepad — inspect
      (87 Elemente), `ui.fill` in `DocumentControl` „Text-Editor" (Text getippt, 27 Zeichen,
      visuell bestätigt), Screenshot-Artifact (157 KB PNG) geschrieben. **AK erfüllt.**
-5. **F5** — Hybrid-Modell + Härtung (Scope-Editor, Denylist-Pflege, Undo, Kill-Switch) + **auto
-   Re-Plan** bei Abweichung + Pixel-Fallback.
+5. **F5 — Härtung: Kill-Switch + Security-Posture ✅ (2026-07-09):**
+   - **Kill-Switch** (`daemon.kill()`/`arm()`, `/api/flow/kill`|`arm`): verwirft alle offenen
+     Freigaben + **sperrt jede Ausführung** (`run`/`approve`/`run_plan`/`run_workflow` geblockt) bis
+     ein Mensch entsperrt; auditiert. Panel: roter **⛔ Stop**-Button + Banner + „Entsperren".
+   - **Security-Posture** (`/api/flow/security`, read-only): Datei-Scope, Kill-State, Gate-Regel,
+     Shell-Allowlist/Denylist, GUI-Treiber + App-Scope, Tool-Wirkungsklassen. Panel-Tab **Sicherheit**.
+     Nur Menschen ändern den Kontrakt — der Inspektor zeigt ihn, er editiert ihn nicht.
+   - **Hybrid-Modell** (Gemma↔Gemini↔Claude umschaltbar) bereits via Provider-Katalog erfüllt.
+   - Gates grün (ruff/mypy 21/pytest 60). Kill/arm + Posture live verifiziert.
+   - **OFFEN (F5-Rest, ehrlich):** Undo für write/exec, Pixel-Fallback, automatisches Re-Plan,
+     runtime Scope-Editor (bewusst menschlich, nicht Agent-editierbar).
 
 ## Betriebs-Hinweise (nicht vergessen)
 

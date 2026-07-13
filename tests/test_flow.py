@@ -27,7 +27,7 @@ from src.flow.models import (
 from src.flow.planner import _parse_plan, plane
 from src.flow.redact import redact
 from src.flow.scope import Scope, ScopeError
-from src.flow.shell import pruefe_kommando, shell_execute
+from src.flow.shell import pruefe_kommando, shell_execute, sicherheits_listen
 from src.flow.tools import fs_list_files, fs_read_file, git_diff, git_status
 from src.flow.workflows import WorkflowStore, substituiere
 
@@ -380,6 +380,51 @@ class TestFlowEval:
         assert len(faelle) >= 5 and all(f.befehl for f in faelle)
 
 
+class TestKillSwitch:
+    def _daemon(self, tmp_path: Path) -> FlowDaemon:
+        return FlowDaemon(scope=Scope.of(tmp_path), audit=AuditLog(tmp_path / ".flow" / "a.jsonl"))
+
+    def test_kill_sperrt_run_und_verwirft_pending(self, tmp_path: Path) -> None:
+        (tmp_path / "x.txt").write_text("hi")
+        d = self._daemon(tmp_path)
+        d.run("shell.execute_powershell", {"command": "git status"})  # -> 1 pending
+        res = d.kill()
+        assert res["gestoppt"] and res["verworfen"] == 1 and d.pending == {}
+        # Auch read ist jetzt gesperrt:
+        assert "fehler" in d.run("fs.list_files", {"pfad": str(tmp_path)})
+        assert d.audit.alle()[-1]["tool"] == "system.kill_switch"
+
+    def test_kill_sperrt_approve(self, tmp_path: Path) -> None:
+        d = self._daemon(tmp_path)
+        pid = d.run("shell.execute_powershell", {"command": "echo x"})["pending"]["id"]
+        d.gestoppt = True
+        assert "fehler" in d.approve(pid)
+
+    def test_arm_entsperrt(self, tmp_path: Path) -> None:
+        (tmp_path / "x.txt").write_text("hi")
+        d = self._daemon(tmp_path)
+        d.kill()
+        assert d.arm()["gestoppt"] is False
+        assert d.run("fs.list_files", {"pfad": str(tmp_path)})["ergebnis"]["ok"]
+
+    def test_kill_sperrt_run_plan(self, tmp_path: Path) -> None:
+        d = self._daemon(tmp_path)
+        d.gestoppt = True
+        assert "fehler" in d.run_plan([{"tool": "fs.list_files", "args": {"pfad": str(tmp_path)}}])
+
+
+class TestSicherheitsPosture:
+    def test_shell_listen_offengelegt(self) -> None:
+        listen = sicherheits_listen()
+        assert "git" in listen["allowlist"] and any("remove-item" in d for d in listen["denylist"])
+
+    def test_gui_status(self) -> None:
+        gui.configure(app_scope=AppScope.of("Notepad"), driver=FakeGuiDriver())
+        st = gui.status()
+        assert st["app_scope"] == ["notepad"] and st["treiber_aktiv"] is True
+        gui.reset()  # zuruecksetzen
+
+
 class FakeGuiDriver:
     """Fake-Treiber: kein echtes UI noetig, protokolliert Aktionen, schreibt Stub-Screenshots."""
 
@@ -452,4 +497,4 @@ class TestGuiAutomation:
         assert d.run("ui.inspect", {"target": "Notepad"})["ergebnis"]["ok"]  # read -> sofort
         assert d.run("ui.click", {"target": "Notepad", "selector": "name=OK"})["pending"][
             "wirkungsklasse"] == "ui"  # gegated
-        gui.configure(app_scope=AppScope.of(), driver=None)  # zuruecksetzen (deny-all)
+        gui.reset()  # zuruecksetzen (deny-all)

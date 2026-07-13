@@ -23,7 +23,7 @@ from urllib.parse import urlparse
 _ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(_ROOT))
 
-from src.flow import gui, models, planner, registry  # noqa: E402
+from src.flow import gui, models, planner, registry, shell  # noqa: E402
 from src.flow.audit import AuditLog  # noqa: E402
 from src.flow.daemon import FlowDaemon  # noqa: E402
 from src.flow.scope import Scope  # noqa: E402
@@ -85,6 +85,8 @@ class _Handler(BaseHTTPRequestHandler):
         elif pfad == "/api/flow/workflows":
             wf = self.daemon.wf_store
             self._send(200, {"workflows": wf.liste() if wf else []})
+        elif pfad == "/api/flow/security":
+            self._send(200, self._sicherheit())
         else:
             self._send(404, {"fehler": "not found"})
 
@@ -116,8 +118,31 @@ class _Handler(BaseHTTPRequestHandler):
         elif pfad == "/api/flow/workflow/run":
             self._send(200, self.daemon.run_workflow(
                 str(payload.get("id", "")), payload.get("params") or {}))
+        elif pfad == "/api/flow/kill":
+            self._send(200, self.daemon.kill())
+        elif pfad == "/api/flow/arm":
+            self._send(200, self.daemon.arm())
         else:
             self._send(404, {"fehler": "not found"})
+
+    def _sicherheit(self) -> dict[str, Any]:
+        """Security-Posture (read-only, Transparenz): Scope, Kill-Switch, Gate, Listen, GUI."""
+        d = self.daemon
+        listen = shell.sicherheits_listen()
+        return {
+            "kill_switch": {"gestoppt": d.gestoppt, "offene_freigaben": len(d.pending)},
+            "datei_scope": [str(r) for r in d.scope.roots],
+            "gate": {"read": "auto", "exec/write/ui": "Freigabe nötig"},
+            "shell": {
+                "allowlist": listen["allowlist"], "allowlist_n": len(listen["allowlist"]),
+                "denylist": listen["denylist"], "denylist_n": len(listen["denylist"]),
+            },
+            "gui": gui.status(),
+            "tools": [
+                {"name": t["name"], "wirkungsklasse": t["wirkungsklasse"]}
+                for t in registry.liste()
+            ],
+        }
 
     def _wf_save(self, payload: dict[str, Any]) -> dict[str, Any]:
         wf = self.daemon.wf_store

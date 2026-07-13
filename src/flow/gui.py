@@ -69,7 +69,7 @@ def configure(
     driver: GuiDriver | None = None,
     artefakt_dir: Path | None = None,
 ) -> None:
-    """GUI-Subsystem konfigurieren (App-Scope, Treiber, Screenshot-Verzeichnis)."""
+    """GUI-Subsystem konfigurieren (None = unverändert lassen)."""
     global _APP_SCOPE, _DRIVER, _ARTEFAKT_DIR
     if app_scope is not None:
         _APP_SCOPE = app_scope
@@ -77,6 +77,28 @@ def configure(
         _DRIVER = driver
     if artefakt_dir is not None:
         _ARTEFAKT_DIR = artefakt_dir
+
+
+def reset() -> None:
+    """GUI-Subsystem hart auf sicheren Default zurücksetzen (deny-all, kein Treiber)."""
+    global _APP_SCOPE, _DRIVER, _ARTEFAKT_DIR
+    _APP_SCOPE = AppScope.of()
+    _DRIVER = None
+    _ARTEFAKT_DIR = Path(".flow") / "artifacts"
+
+
+def aktiv() -> tuple[AppScope, GuiDriver | None]:
+    """Aktueller (App-Scope, Treiber) — von der Registry zur Laufzeit gelesen."""
+    return _APP_SCOPE, _DRIVER
+
+
+def status() -> dict[str, Any]:
+    """Aktuelle GUI-Sicherheitslage (für den Security-Posture-Inspektor, F5)."""
+    return {
+        "app_scope": list(_APP_SCOPE.muster),
+        "treiber_aktiv": _DRIVER is not None,
+        "artefakt_dir": str(_ARTEFAKT_DIR),
+    }
 
 
 def _fehler(tool: str, klasse: str, msg: str) -> ToolResult:
@@ -105,14 +127,11 @@ def _screenshot(drv: GuiDriver, dir_: Path, tag: str) -> str | None:
         return None
 
 
-def ui_inspect(
-    target: str, app_scope: AppScope | None = None, driver: GuiDriver | None = None
-) -> ToolResult:
+def ui_inspect(target: str, app_scope: AppScope, driver: GuiDriver | None) -> ToolResult:
     """Accessibility-Baum einer erlaubten App lesen (nebenwirkungsfrei, ``read``)."""
     tool, klasse = "ui.inspect", "read"
-    scope = app_scope if app_scope is not None else _APP_SCOPE
-    drv = driver if driver is not None else _DRIVER
-    fehler = _pruefe(tool, klasse, target, scope, drv)
+    drv = driver
+    fehler = _pruefe(tool, klasse, target, app_scope, drv)
     if fehler is not None:
         return fehler
     assert drv is not None
@@ -132,13 +151,12 @@ def ui_inspect(
 
 
 def ui_click(
-    target: str, selector: str, app_scope: AppScope | None = None, driver: GuiDriver | None = None
+    target: str, selector: str, app_scope: AppScope, driver: GuiDriver | None
 ) -> ToolResult:
     """Element in einer erlaubten App anklicken (``ui``, gegated). Screenshot je Schritt."""
     tool, klasse = "ui.click", "ui"
-    scope = app_scope if app_scope is not None else _APP_SCOPE
-    drv = driver if driver is not None else _DRIVER
-    fehler = _pruefe(tool, klasse, target, scope, drv)
+    drv = driver
+    fehler = _pruefe(tool, klasse, target, app_scope, drv)
     if fehler is not None:
         return fehler
     assert drv is not None
@@ -153,14 +171,12 @@ def ui_click(
 
 
 def ui_fill(
-    target: str, selector: str, wert: str,
-    app_scope: AppScope | None = None, driver: GuiDriver | None = None,
+    target: str, selector: str, wert: str, app_scope: AppScope, driver: GuiDriver | None
 ) -> ToolResult:
     """Textfeld in einer erlaubten App setzen (``ui``, gegated). Der Wert wird NICHT geloggt."""
     tool, klasse = "ui.fill", "ui"
-    scope = app_scope if app_scope is not None else _APP_SCOPE
-    drv = driver if driver is not None else _DRIVER
-    fehler = _pruefe(tool, klasse, target, scope, drv)
+    drv = driver
+    fehler = _pruefe(tool, klasse, target, app_scope, drv)
     if fehler is not None:
         return fehler
     assert drv is not None

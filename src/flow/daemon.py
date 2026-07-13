@@ -26,9 +26,34 @@ class FlowDaemon:
     audit: AuditLog
     pending: dict[str, dict[str, Any]] = field(default_factory=dict)
     wf_store: WorkflowStore | None = None
+    gestoppt: bool = False  # Kill-Switch (F5, §5): True = jede Ausführung gesperrt
+
+    def kill(self) -> dict[str, Any]:
+        """Kill-Switch: alle offenen Freigaben verwerfen + Ausführung sperren (F5, §5)."""
+        verworfen = len(self.pending)
+        self.pending.clear()
+        self.gestoppt = True
+        self.audit.schreibe(
+            tool="system.kill_switch", wirkungsklasse="exec", args={"verworfen": verworfen},
+            freigabe="user", ok=True, ergebnis={"gestoppt": True}, dauer_ms=0,
+        )
+        return {"gestoppt": True, "verworfen": verworfen}
+
+    def arm(self) -> dict[str, Any]:
+        """Kill-Switch lösen — Ausführung wieder erlauben (bewusste Menschen-Aktion)."""
+        self.gestoppt = False
+        self.audit.schreibe(
+            tool="system.kill_switch", wirkungsklasse="exec", args={"arm": True},
+            freigabe="user", ok=True, ergebnis={"gestoppt": False}, dauer_ms=0,
+        )
+        return {"gestoppt": False}
+
+    _GESPERRT = {"fehler": "Kill-Switch aktiv — Ausführung gesperrt. Erst entsperren (arm)."}
 
     def run_workflow(self, wf_id: str, params: dict[str, str]) -> dict[str, Any]:
         """Gespeicherten Workflow ausfuehren: Params ersetzen, jeden Schritt GEGATET (§6, F3)."""
+        if self.gestoppt:
+            return dict(self._GESPERRT)
         if self.wf_store is None:
             return {"fehler": "Kein Workflow-Store konfiguriert."}
         wf = self.wf_store.lies(wf_id)
@@ -40,6 +65,8 @@ class FlowDaemon:
 
     def run(self, tool: str, args: dict[str, Any]) -> dict[str, Any]:
         """read → sofort ausführen (auto); exec/write/ui → PENDING (braucht Freigabe)."""
+        if self.gestoppt:
+            return dict(self._GESPERRT)
         spec = registry.REGISTRY.get(tool)
         if spec is None:
             return {"fehler": f"Unbekanntes Tool: {tool}"}
@@ -59,6 +86,8 @@ class FlowDaemon:
         Kein autonomes Durchlaufen gefaehrlicher Aktionen (§1/§5.2). `rest` liefert die noch
         offenen Schritte — nach Freigabe kann die Kette damit fortgesetzt werden.
         """
+        if self.gestoppt:
+            return dict(self._GESPERRT)
         ergebnisse: list[dict[str, Any]] = []
         for i, step in enumerate(plan):
             tool = str(step.get("tool", ""))
@@ -80,6 +109,8 @@ class FlowDaemon:
 
     def approve(self, pid: str) -> dict[str, Any]:
         """Menschliche Freigabe → Ausführung der PENDING-Aktion."""
+        if self.gestoppt:
+            return dict(self._GESPERRT)
         aktion = self.pending.pop(pid, None)
         if aktion is None:
             return {"fehler": "Unbekannte oder bereits erledigte Freigabe."}

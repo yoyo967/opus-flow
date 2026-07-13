@@ -57,17 +57,18 @@ REGISTRY: dict[str, ToolSpec] = {
     ),
     "ui.inspect": ToolSpec(
         "ui.inspect", "read", "Accessibility-Baum einer erlaubten App lesen", ("target",),
-        lambda s, a: gui.ui_inspect(_arg(a, "target")),
+        lambda s, a: gui.ui_inspect(_arg(a, "target"), *gui.aktiv()),
     ),
     "ui.click": ToolSpec(
         "ui.click", "ui", "Element in erlaubter App klicken — braucht Freigabe",
         ("target", "selector"),
-        lambda s, a: gui.ui_click(_arg(a, "target"), _arg(a, "selector")),
+        lambda s, a: gui.ui_click(_arg(a, "target"), _arg(a, "selector"), *gui.aktiv()),
     ),
     "ui.fill": ToolSpec(
         "ui.fill", "ui", "Textfeld in erlaubter App setzen — braucht Freigabe",
         ("target", "selector", "wert"),
-        lambda s, a: gui.ui_fill(_arg(a, "target"), _arg(a, "selector"), _arg(a, "wert")),
+        lambda s, a: gui.ui_fill(
+            _arg(a, "target"), _arg(a, "selector"), _arg(a, "wert"), *gui.aktiv()),
     ),
 }
 
