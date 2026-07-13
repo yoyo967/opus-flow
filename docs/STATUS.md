@@ -52,7 +52,7 @@ wird deshalb zu **OPUS FLOW EX**. Konkret:
      (6 Fälle), CLI `python -m apps.eval.run [--model … --set … --json]`. Modell injizierbar → Tests
      ohne echtes Modell. **Live:** lokales Gemma erzeugte für „git-status dieses repos" einen gültigen
      `git.status`-Plan (100 % über alle Kriterien).
-   - Gates grün (ruff/mypy 19/pytest 47). opus-flow `<commit>`, opus-deck `<commit>`.
+   - Gates grün (ruff/mypy 19/pytest 47). opus-flow `1ffe3e8`, opus-deck `fe113ba` (Workbench v11).
    - **Bewusst OFFEN (ehrlich):** *automatisches* Re-Plan (Modell revidiert den Plan bei Abweichung)
      — aktuell setzt der Mensch die Kette nach Freigabe mit `rest` fort; volles Auto-Re-Plan → F5.
 4. **F4** — GUI-Automation (Windows UI Automation / DOM).
