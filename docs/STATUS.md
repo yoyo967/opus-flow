@@ -65,10 +65,10 @@ wird deshalb zu **OPUS FLOW EX**. Konkret:
      `build_driver()` importsicher gekapselt → fehlt Extra/kein Windows: Tools liefern typisierten
      Fehler statt Crash. Selector: `name=` · `auto=` · `class=`.
    - Registry + Server-Start verdrahtet (`FLOW_APPS` = App-Allowlist); Panel listet `ui.*` automatisch.
-   - Gates grün (ruff/mypy 21/pytest 54, Fake-Treiber-E2E). Live: Tools registriert + gegatet, Treiber
-     ohne Extra graceful deaktiviert — verifiziert.
-   - **OFFEN (ehrlich, opt-in):** Live-Verifikation des ECHTEN Treibers an einer nativen Ziel-App
-     (Klick+Fill+Screenshot) — braucht `pip install .[gui]` + Ziel-App auf dem Desktop + `FLOW_APPS`.
+   - Gates grün (ruff/mypy 21/pytest 54, Fake-Treiber-E2E).
+   - **LIVE VERIFIZIERT (2026-07-09):** echter UIA-Treiber gegen Windows-11-Notepad — inspect
+     (87 Elemente), `ui.fill` in `DocumentControl` „Text-Editor" (Text getippt, 27 Zeichen,
+     visuell bestätigt), Screenshot-Artifact (157 KB PNG) geschrieben. **AK erfüllt.**
 5. **F5** — Hybrid-Modell + Härtung (Scope-Editor, Denylist-Pflege, Undo, Kill-Switch) + **auto
    Re-Plan** bei Abweichung + Pixel-Fallback.
 
