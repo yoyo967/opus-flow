@@ -1,0 +1,8 @@
+[
+  { "befehl": "zeig mir den git-status dieses repos", "erwartete_tools": ["git.status"] },
+  { "befehl": "welche dateien liegen in diesem ordner", "erwartete_tools": ["fs.list_files"] },
+  { "befehl": "lies die datei README.md", "erwartete_tools": ["fs.read_file"] },
+  { "befehl": "zeig mir die uncommitteten aenderungen als diff", "erwartete_tools": ["git.diff"] },
+  { "befehl": "liste die dateien und zeig danach den git-status", "erwartete_tools": ["fs.list_files", "git.status"] },
+  { "befehl": "fuehr das kommando 'git status' als powershell aus", "erwartete_tools": ["shell.execute_powershell"] }
+]

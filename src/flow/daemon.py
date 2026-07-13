@@ -52,6 +52,32 @@ class FlowDaemon:
             return {"pending": self.pending[pid]}
         return {"ergebnis": self._execute(tool, args, "auto")}
 
+    def run_plan(self, plan: list[dict[str, Any]]) -> dict[str, Any]:
+        """Plan als Kette ausfuehren (§4/F2): read-Schritte laufen automatisch, der ERSTE
+        gegatete Schritt (exec/write/ui) pausiert die Kette und wird zur Freigabe vorgelegt.
+
+        Kein autonomes Durchlaufen gefaehrlicher Aktionen (§1/§5.2). `rest` liefert die noch
+        offenen Schritte — nach Freigabe kann die Kette damit fortgesetzt werden.
+        """
+        ergebnisse: list[dict[str, Any]] = []
+        for i, step in enumerate(plan):
+            tool = str(step.get("tool", ""))
+            roh = step.get("args")
+            args: dict[str, Any] = roh if isinstance(roh, dict) else {}
+            spec = registry.REGISTRY.get(tool)
+            if spec is None:
+                ergebnisse.append({"tool": tool, "fehler": "Unbekanntes Tool"})
+                return {"ergebnisse": ergebnisse, "status": "fehler", "index": i}
+            if gate.braucht_freigabe(spec.wirkungsklasse):
+                aus = self.run(tool, args)  # erzeugt PENDING (kein Execute)
+                return {
+                    "ergebnisse": ergebnisse, "pending": aus.get("pending"),
+                    "rest": plan[i + 1:], "status": "warte_freigabe", "index": i,
+                }
+            aus = self.run(tool, args)  # read -> sofort ausgefuehrt (auto)
+            ergebnisse.append(aus.get("ergebnis", aus))
+        return {"ergebnisse": ergebnisse, "status": "fertig"}
+
     def approve(self, pid: str) -> dict[str, Any]:
         """Menschliche Freigabe → Ausführung der PENDING-Aktion."""
         aktion = self.pending.pop(pid, None)

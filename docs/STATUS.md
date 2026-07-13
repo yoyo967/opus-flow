@@ -42,8 +42,19 @@ wird deshalb zu **OPUS FLOW EX**. Konkret:
    Flow-Panel: neuer **Workflows-Tab** (Plan speichern · listen · mit `${param}`-Werten abspielen).
    Gates grün (ruff/mypy 16/pytest 39); Save→List→Run live verifiziert (`${repo}`→git.status auto).
    opus-flow `aff253d`, opus-deck `309e035`.
-3. **F2-Feinschliff** — automatische Ketten-Ausführung + Re-Plan + **Flow-Eval** (Gemma-Function-
-   Calling-Zuverlässigkeit messen, §7/§9).
+3. **F2-Feinschliff — Ketten-Ausführung + Flow-Eval ✅ (2026-07-09):**
+   - **Ketten-Ausführung:** `daemon.run_plan(plan)` läuft den ganzen Plan als Kette — `read`-Schritte
+     automatisch, der **erste** gegatete Schritt (exec/write/ui) **pausiert** die Kette und wird zur
+     Freigabe vorgelegt (kein autonomes Durchlaufen, §1/§5.2); `rest` liefert die offenen Schritte.
+     HTTP `POST /api/flow/run_plan`; Flow-Panel: Button **▶ Kette ausführen** + Status-Karte.
+   - **Flow-Eval (§7/§9 „messen statt annehmen"):** `src/flow/eval.py` bewertet Pläne deterministisch
+     (geparst · tools_gültig · scope_ok via Dry-Run · erwartet_getroffen), Satz `config/flow_eval.json`
+     (6 Fälle), CLI `python -m apps.eval.run [--model … --set … --json]`. Modell injizierbar → Tests
+     ohne echtes Modell. **Live:** lokales Gemma erzeugte für „git-status dieses repos" einen gültigen
+     `git.status`-Plan (100 % über alle Kriterien).
+   - Gates grün (ruff/mypy 19/pytest 47). opus-flow `<commit>`, opus-deck `<commit>`.
+   - **Bewusst OFFEN (ehrlich):** *automatisches* Re-Plan (Modell revidiert den Plan bei Abweichung)
+     — aktuell setzt der Mensch die Kette nach Freigabe mit `rest` fort; volles Auto-Re-Plan → F5.
 4. **F4** — GUI-Automation (Windows UI Automation / DOM).
 
 ## Betriebs-Hinweise (nicht vergessen)

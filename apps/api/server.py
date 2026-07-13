@@ -96,6 +96,8 @@ class _Handler(BaseHTTPRequestHandler):
                 str(payload.get("befehl", "")), str(mid) if mid else None))
         elif pfad == "/api/flow/dry_run":
             self._send(200, self.daemon.dry_run(payload.get("plan") or []))
+        elif pfad == "/api/flow/run_plan":
+            self._send(200, self.daemon.run_plan(payload.get("plan") or []))
         elif pfad == "/api/flow/run":
             args = payload.get("args") or {}
             self._send(200, self.daemon.run(str(payload.get("tool", "")), args))
@@ -115,9 +117,10 @@ class _Handler(BaseHTTPRequestHandler):
         wf = self.daemon.wf_store
         if wf is None:
             return {"fehler": "Kein Workflow-Store."}
+        schritte = payload.get("schritte") or payload.get("plan") or []
         try:
             return wf.speichere(
-                str(payload.get("name", "")), payload.get("plan") or [], payload.get("params"))
+                str(payload.get("name", "")), schritte, payload.get("params"))
         except ValueError as exc:
             return {"fehler": str(exc)}
 

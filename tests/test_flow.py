@@ -7,11 +7,13 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from src.flow.audit import AuditLog
 from src.flow.daemon import FlowDaemon
+from src.flow.eval import EvalFall, bewerte_plan, evaluiere, lade_faelle
 from src.flow.gate import braucht_freigabe
 from src.flow.models import (
     ModelNotFound,
@@ -305,3 +307,72 @@ class TestWorkflows:
             scope=Scope.of(tmp_path), audit=AuditLog(tmp_path / "a.jsonl"),
             wf_store=self._store(tmp_path))
         assert "fehler" in d.run_workflow("gibt-nicht", {})
+
+
+class TestRunPlan:
+    def _daemon(self, tmp_path: Path) -> FlowDaemon:
+        return FlowDaemon(scope=Scope.of(tmp_path), audit=AuditLog(tmp_path / ".flow" / "a.jsonl"))
+
+    def test_read_kette_laeuft_durch(self, tmp_path: Path) -> None:
+        (tmp_path / "x.txt").write_text("hi")
+        d = self._daemon(tmp_path)
+        plan = [
+            {"tool": "fs.list_files", "args": {"pfad": str(tmp_path)}},
+            {"tool": "fs.list_files", "args": {"pfad": str(tmp_path)}},
+        ]
+        antwort = d.run_plan(plan)
+        assert antwort["status"] == "fertig" and len(antwort["ergebnisse"]) == 2
+        assert all(e["ok"] for e in antwort["ergebnisse"])
+
+    def test_pausiert_beim_ersten_gate(self, tmp_path: Path) -> None:
+        d = self._daemon(tmp_path)
+        plan = [
+            {"tool": "fs.list_files", "args": {"pfad": str(tmp_path)}},
+            {"tool": "shell.execute_powershell", "args": {"command": "git status"}},
+            {"tool": "fs.list_files", "args": {"pfad": str(tmp_path)}},
+        ]
+        antwort = d.run_plan(plan)
+        assert antwort["status"] == "warte_freigabe" and antwort["index"] == 1
+        assert len(antwort["ergebnisse"]) == 1  # nur der read-Schritt lief
+        assert antwort["pending"]["wirkungsklasse"] == "exec"
+        assert len(antwort["rest"]) == 1  # der letzte Schritt bleibt offen
+        assert d.audit.alle()[-1]["freigabe"] == "auto"  # kein exec auditiert
+
+    def test_unbekanntes_tool_stoppt(self, tmp_path: Path) -> None:
+        d = self._daemon(tmp_path)
+        antwort = d.run_plan([{"tool": "gibt.nicht", "args": {}}])
+        assert antwort["status"] == "fehler" and antwort["index"] == 0
+
+
+class TestFlowEval:
+    def test_bewerte_guter_plan(self) -> None:
+        plan = [{"tool": "git.status", "args": {"repo": "."}}]
+        b = bewerte_plan(plan, [{"ok": True}], ["git.status"])
+        assert b["geparst"] and b["tools_gueltig"] and b["scope_ok"]
+        assert b["erwartet_getroffen"] is True
+
+    def test_bewerte_ungueltiges_tool(self) -> None:
+        b = bewerte_plan([{"tool": "foo.bar", "args": {}}], [{"ok": True}], [])
+        assert b["geparst"] and not b["tools_gueltig"]
+        assert b["erwartet_getroffen"] is None  # keine Erwartung -> n/a
+
+    def test_bewerte_leerer_plan(self) -> None:
+        b = bewerte_plan([], [], ["git.status"])
+        assert not b["geparst"] and not b["scope_ok"]
+
+    def test_evaluiere_aggregiert_raten(self) -> None:
+        def planner_fn(_befehl: str) -> dict[str, Any]:
+            return {"plan": [{"tool": "git.status", "args": {"repo": "."}}]}
+
+        def dry_fn(plan: list[dict[str, Any]]) -> dict[str, Any]:
+            return {"dry_run": [{"ok": True} for _ in plan]}
+
+        faelle = [EvalFall("a", ["git.status"]), EvalFall("b", ["fs.list_files"])]
+        bericht = evaluiere(faelle, planner_fn, dry_fn)
+        s = bericht["summary"]
+        assert s["n"] == 2 and s["geparst"] == 1.0 and s["tools_gueltig"] == 1.0
+        assert s["erwartet_getroffen"] == 0.5  # 1 von 2 Erwartungen getroffen
+
+    def test_lade_standard_satz(self) -> None:
+        faelle = lade_faelle()
+        assert len(faelle) >= 5 and all(f.befehl for f in faelle)
