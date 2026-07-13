@@ -11,10 +11,12 @@ from typing import Any
 
 import pytest
 
+from src.flow import gui
 from src.flow.audit import AuditLog
 from src.flow.daemon import FlowDaemon
 from src.flow.eval import EvalFall, bewerte_plan, evaluiere, lade_faelle
 from src.flow.gate import braucht_freigabe
+from src.flow.gui import AppScope, ui_click, ui_fill, ui_inspect
 from src.flow.models import (
     ModelNotFound,
     ModelProfile,
@@ -376,3 +378,78 @@ class TestFlowEval:
     def test_lade_standard_satz(self) -> None:
         faelle = lade_faelle()
         assert len(faelle) >= 5 and all(f.befehl for f in faelle)
+
+
+class FakeGuiDriver:
+    """Fake-Treiber: kein echtes UI noetig, protokolliert Aktionen, schreibt Stub-Screenshots."""
+
+    def __init__(self, elemente: list[dict[str, Any]] | None = None) -> None:
+        self.elemente = elemente or [
+            {"name": "Speichern", "rolle": "Button", "selector": "name=Speichern"},
+        ]
+        self.klicks: list[tuple[str, str]] = []
+        self.fills: list[tuple[str, str, str]] = []
+
+    def inspect(self, target: str) -> list[dict[str, Any]]:
+        return self.elemente
+
+    def click(self, target: str, selector: str) -> bool:
+        self.klicks.append((target, selector))
+        return True
+
+    def fill(self, target: str, selector: str, wert: str) -> bool:
+        self.fills.append((target, selector, wert))
+        return True
+
+    def screenshot(self, ziel: Path) -> None:
+        ziel.write_bytes(b"PNG-STUB")
+
+
+class TestGuiAutomation:
+    def test_app_scope_allowlist(self) -> None:
+        scope = AppScope.of("Notepad", "OPUS DECK")
+        assert scope.erlaubt("Unbenannt - Notepad") and scope.erlaubt("opus deck — workbench")
+        assert not scope.erlaubt("Online-Banking")
+        assert not AppScope.of().erlaubt("irgendwas")  # leer = deny-all
+
+    def test_inspect_strukturiert_und_redigiert(self) -> None:
+        drv = FakeGuiDriver(
+            [{"name": "token sk-ABCDEFGHIJKLMNOP12", "rolle": "Text", "selector": ""}])
+        r = ui_inspect("Notepad", app_scope=AppScope.of("Notepad"), driver=drv)
+        assert r.ok and r.wirkungsklasse == "read"
+        assert "sk-ABCDEFGHIJKLMNOP12" not in r.data["elemente"][0]["name"]  # redigiert
+
+    def test_inspect_ausserhalb_scope(self) -> None:
+        r = ui_inspect("Banking", app_scope=AppScope.of("Notepad"), driver=FakeGuiDriver())
+        assert not r.ok and r.fehler and "App-Scope" in r.fehler
+
+    def test_ohne_treiber_typisierter_fehler(self) -> None:
+        r = ui_inspect("Notepad", app_scope=AppScope.of("Notepad"), driver=None)
+        assert not r.ok and r.fehler and "Treiber" in r.fehler
+
+    def test_click_ist_ui_und_screenshot(self, tmp_path: Path) -> None:
+        gui.configure(artefakt_dir=tmp_path)
+        drv = FakeGuiDriver()
+        r = ui_click("Notepad", "name=Speichern", app_scope=AppScope.of("Notepad"), driver=drv)
+        assert r.ok and r.wirkungsklasse == "ui" and drv.klicks == [("Notepad", "name=Speichern")]
+        assert r.data["screenshot"] and Path(r.data["screenshot"]).exists()
+
+    def test_fill_verschweigt_wert(self, tmp_path: Path) -> None:
+        gui.configure(artefakt_dir=tmp_path)
+        drv = FakeGuiDriver()
+        r = ui_fill("Notepad", "auto=Feld1", "geheim123",
+                    app_scope=AppScope.of("Notepad"), driver=drv)
+        assert r.ok and r.wirkungsklasse == "ui"
+        # Wert taucht in der Ausgabe NICHT auf (nur Laenge), aber der Treiber hat ihn gesetzt.
+        assert "geheim123" not in str(r.data) and r.data["wert_laenge"] == 9
+        assert drv.fills == [("Notepad", "auto=Feld1", "geheim123")]
+
+    def test_registry_ui_klassen_und_gate(self, tmp_path: Path) -> None:
+        # ui.inspect = read (auto), ui.click/ui.fill = ui (gegated) — via Daemon/Registry.
+        gui.configure(
+            app_scope=AppScope.of("Notepad"), driver=FakeGuiDriver(), artefakt_dir=tmp_path)
+        d = FlowDaemon(scope=Scope.of(tmp_path), audit=AuditLog(tmp_path / "a.jsonl"))
+        assert d.run("ui.inspect", {"target": "Notepad"})["ergebnis"]["ok"]  # read -> sofort
+        assert d.run("ui.click", {"target": "Notepad", "selector": "name=OK"})["pending"][
+            "wirkungsklasse"] == "ui"  # gegated
+        gui.configure(app_scope=AppScope.of(), driver=None)  # zuruecksetzen (deny-all)

@@ -12,7 +12,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from src.flow import shell, tools
+from src.flow import gui, shell, tools
 from src.flow.scope import Scope
 from src.flow.tools import ToolResult
 
@@ -54,6 +54,20 @@ REGISTRY: dict[str, ToolSpec] = {
         "shell.execute_powershell", "exec",
         "PowerShell-Kommando (Allowlist, Denylist, Timeout) — braucht Freigabe", ("command",),
         lambda s, a: shell.shell_execute(s, _arg(a, "command")),
+    ),
+    "ui.inspect": ToolSpec(
+        "ui.inspect", "read", "Accessibility-Baum einer erlaubten App lesen", ("target",),
+        lambda s, a: gui.ui_inspect(_arg(a, "target")),
+    ),
+    "ui.click": ToolSpec(
+        "ui.click", "ui", "Element in erlaubter App klicken — braucht Freigabe",
+        ("target", "selector"),
+        lambda s, a: gui.ui_click(_arg(a, "target"), _arg(a, "selector")),
+    ),
+    "ui.fill": ToolSpec(
+        "ui.fill", "ui", "Textfeld in erlaubter App setzen — braucht Freigabe",
+        ("target", "selector", "wert"),
+        lambda s, a: gui.ui_fill(_arg(a, "target"), _arg(a, "selector"), _arg(a, "wert")),
     ),
 }
 

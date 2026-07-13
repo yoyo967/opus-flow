@@ -17,6 +17,8 @@ mcp = ["mcp>=1.9"]
 # Planner-Provider (optional, lazy importiert; nur fuer Live-Aufrufe des jeweiligen Modells).
 anthropic = ["anthropic>=0.90"]
 vertex = ["google-cloud-aiplatform>=1.60"]
+# GUI-Automation (Windows UI Automation). Nur Windows; ohne das Extra bleiben ui.*-Tools deaktiviert.
+gui = ["uiautomation>=2.0"]
 
 [project.scripts]
 opus-flow-mcp = "src.flow.server:main"
@@ -52,6 +54,11 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 # Planner-Provider-SDKs (optionale Extras [anthropic]/[vertex]), lazy in src/flow/planner.py.
 module = ["anthropic", "anthropic.*", "vertexai", "vertexai.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# uiautomation (Extra [gui]), nur auf Windows via gui.build_driver() geladen (src/flow/gui_windows.py).
+module = ["uiautomation", "uiautomation.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

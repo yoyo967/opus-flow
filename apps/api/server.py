@@ -23,7 +23,7 @@ from urllib.parse import urlparse
 _ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(_ROOT))
 
-from src.flow import models, planner, registry  # noqa: E402
+from src.flow import gui, models, planner, registry  # noqa: E402
 from src.flow.audit import AuditLog  # noqa: E402
 from src.flow.daemon import FlowDaemon  # noqa: E402
 from src.flow.scope import Scope  # noqa: E402
@@ -43,6 +43,12 @@ def _audit_pfad() -> Path:
 
 def _wf_dir() -> Path:
     return Path(os.environ.get("FLOW_WORKFLOWS") or (Path.cwd() / ".flow" / "workflows"))
+
+
+def _app_scope() -> gui.AppScope:
+    """App-Allowlist aus FLOW_APPS (Komma-getrennt). Leer = deny-all (Least Privilege, §5.1)."""
+    roh = os.environ.get("FLOW_APPS", "")
+    return gui.AppScope.of(*[m for m in roh.split(",") if m.strip()])
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -131,7 +137,14 @@ class _Handler(BaseHTTPRequestHandler):
 def main() -> int:
     _Handler.daemon = FlowDaemon(
         scope=_scope(), audit=AuditLog(_audit_pfad()), wf_store=WorkflowStore(_wf_dir()))
+    app_scope = _app_scope()
+    driver = gui.build_driver()
+    root = Path(os.environ.get("FLOW_ROOT") or str(Path.cwd()))
+    gui.configure(app_scope=app_scope, driver=driver, artefakt_dir=root / ".flow" / "artifacts")
+    treiber = "aktiv" if driver is not None else "deaktiviert (Extra [gui]/kein Windows)"
+    muster = list(app_scope.muster) or "(leer=deny-all)"
     print(f"[flow] OPUS FLOW API · Scope: {[str(r) for r in _Handler.daemon.scope.roots]}")
+    print(f"[flow] GUI-Treiber: {treiber} · App-Scope: {muster}")
     print(f"[flow] -> http://{_HOST}:{_PORT}   (Strg+C zum Beenden)")
     with socketserver.ThreadingTCPServer((_HOST, _PORT), _Handler) as httpd:
         try:

@@ -55,7 +55,22 @@ wird deshalb zu **OPUS FLOW EX**. Konkret:
    - Gates grün (ruff/mypy 19/pytest 47). opus-flow `1ffe3e8`, opus-deck `fe113ba` (Workbench v11).
    - **Bewusst OFFEN (ehrlich):** *automatisches* Re-Plan (Modell revidiert den Plan bei Abweichung)
      — aktuell setzt der Mensch die Kette nach Freigabe mit `rest` fort; volles Auto-Re-Plan → F5.
-4. **F4** — GUI-Automation (Windows UI Automation / DOM).
+4. **F4 — GUI-Automation ✅ Framework (2026-07-09):** Accessibility-first (Windows UI Automation),
+   App-Scope bindend.
+   - `src/flow/gui.py` — `AppScope` (Allowlist erlaubter Apps, **Default leer = deny-all**, Least
+     Privilege §5.1), `GuiDriver`-Protocol (injizierbar), Tools `ui.inspect` (`read`, nebenwirkungs-
+     frei), `ui.click`/`ui.fill` (`ui`, **gegated** §5.2). Ausgaben redigiert; `ui.fill` verschweigt
+     den Wert (nur Länge, §5.7). **Screenshot je Schritt** als Artifact (AK F4).
+   - `src/flow/gui_windows.py` — echter UIA-Treiber (Extra `[gui]`=`uiautomation`), hinter
+     `build_driver()` importsicher gekapselt → fehlt Extra/kein Windows: Tools liefern typisierten
+     Fehler statt Crash. Selector: `name=` · `auto=` · `class=`.
+   - Registry + Server-Start verdrahtet (`FLOW_APPS` = App-Allowlist); Panel listet `ui.*` automatisch.
+   - Gates grün (ruff/mypy 21/pytest 54, Fake-Treiber-E2E). Live: Tools registriert + gegatet, Treiber
+     ohne Extra graceful deaktiviert — verifiziert.
+   - **OFFEN (ehrlich, opt-in):** Live-Verifikation des ECHTEN Treibers an einer nativen Ziel-App
+     (Klick+Fill+Screenshot) — braucht `pip install .[gui]` + Ziel-App auf dem Desktop + `FLOW_APPS`.
+5. **F5** — Hybrid-Modell + Härtung (Scope-Editor, Denylist-Pflege, Undo, Kill-Switch) + **auto
+   Re-Plan** bei Abweichung + Pixel-Fallback.
 
 ## Betriebs-Hinweise (nicht vergessen)
 
